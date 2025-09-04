@@ -25,58 +25,13 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-/**
- * 读取配置：角色/币种/分类映射
- * 需要的工作表：
- * - Config_Roles: [role_id, role_name, email?]
- * - Config_Currency: [currency_code]
- * - Config_Categories: [category, subcategory]
- */
-function getConfig() {
-  const ss = _ss();
-
-  const rolesSheet = ss.getSheetByName('Config_Roles');
-  const currencySheet = ss.getSheetByName('Config_Currency');
-  const catSheet = ss.getSheetByName('Config_Categories');
-
-  if (!rolesSheet || !currencySheet || !catSheet) {
-    throw new Error('缺少配置表：请确认存在 Config_Roles / Config_Currency / Config_Categories');
-  }
-
-  // Roles
-  const rolesValues = rolesSheet.getDataRange().getValues();
-  const roles = [];
-  for (let i = 1; i < rolesValues.length; i++) {
-    const [id, name, email] = rolesValues[i];
-    if (name) roles.push({ id: String(id || ''), name: String(name), email: String(email || '') });
-  }
-
-  // Currencies
-  const curValues = currencySheet.getDataRange().getValues();
-  const currencies = [];
-  for (let i = 1; i < curValues.length; i++) {
-    const [code] = curValues[i];
-    if (code) currencies.push(String(code));
-  }
-
-  // Categories mapping
-  const catValues = catSheet.getDataRange().getValues();
-  const mapping = {};
-  for (let i = 1; i < catValues.length; i++) {
-    const [cat, sub] = catValues[i];
-    if (!cat || !sub) continue;
-    if (!mapping[cat]) mapping[cat] = [];
-    mapping[cat].push(String(sub));
-  }
-
-  return { roles, currencies, categories: mapping };
-}
+let _configCache = null;
 
 /**
  * 写一笔交易到 Transactions
  * 仅保留 role 一列作为“记账人”标识，不再写 created_by
  * 需要的工作表：
- * - Transactions: [timestamp, role, currency, category, subcategory, amount, note]
+ * - Transactions: [timestamp, subcategory, category, amount, role, currency, note]
  */
 function recordTxn(payload) {
   if (!payload) throw new Error('空请求');
@@ -103,10 +58,70 @@ function recordTxn(payload) {
   const sheet = ss.getSheetByName('Transactions');
   if (!sheet) throw new Error('缺少 Transactions 表');
 
-  const row = [new Date(), subcategory,category,Number(amt),role, currency, note || ''];
+  const row = [new Date(), subcategory, category, Number(amt), role, currency, note || ''];
   sheet.appendRow(row);
 
   return { ok: true, row: sheet.getLastRow() };
+}
+
+/**
+ * 读取配置：角色/币种/分类映射，结果缓存以减少重复读取
+ * 需要的工作表：
+ * - Config_Roles: [role_id, role_name, email?] 或 [role_name, email?]
+ * - Config_Currency: [currency_code]
+ * - Config_Categories: [category, subcategory]
+ */
+function getConfig() {
+  if (_configCache) return _configCache;
+
+  const ss = _ss();
+
+  const rolesSheet = ss.getSheetByName('Config_Roles');
+  const currencySheet = ss.getSheetByName('Config_Currency');
+  const catSheet = ss.getSheetByName('Config_Categories');
+
+  if (!rolesSheet || !currencySheet || !catSheet) {
+    throw new Error('缺少配置表：请确认存在 Config_Roles / Config_Currency / Config_Categories');
+  }
+
+  // Roles
+  const rolesValues = rolesSheet.getDataRange().getValues();
+  const roles = [];
+  for (let i = 1; i < rolesValues.length; i++) {
+    const row = rolesValues[i];
+    let id = row[0];
+    let name = row[1];
+    const email = row[2];
+    if (!name) name = id; // 只有一列时兼容把首列视为 name
+    if (name) roles.push({ id: String(id || name), name: String(name), email: String(email || '') });
+  }
+
+  // Currencies
+  const curValues = currencySheet.getDataRange().getValues();
+  const currencies = [];
+  for (let i = 1; i < curValues.length; i++) {
+    const [code] = curValues[i];
+    if (code) currencies.push(String(code));
+  }
+
+  // Categories mapping
+  const catValues = catSheet.getDataRange().getValues();
+  const mapping = {};
+  for (let i = 1; i < catValues.length; i++) {
+    const [cat, sub] = catValues[i];
+    if (!cat || !sub) continue;
+    if (!mapping[cat]) mapping[cat] = [];
+    mapping[cat].push(String(sub));
+  }
+
+  _configCache = { roles, currencies, categories: mapping };
+  return _configCache;
+}
+
+/** 清空配置缓存，可在配置变更后调用 */
+function refreshConfig() {
+  _configCache = null;
+  return getConfig();
 }
 
 /** 快速造一条示例数据（可在 Apps Script 里手动运行） */

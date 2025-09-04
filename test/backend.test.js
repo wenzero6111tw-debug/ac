@@ -55,6 +55,7 @@ function setupEnv() {
   global.SpreadsheetApp = {
     getActive: () => new MockSpreadsheet(sheets)
   };
+  refreshConfig();
   return sheets;
 }
 
@@ -64,6 +65,36 @@ test('getConfig parses sheets', () => {
   assert.deepStrictEqual(conf.roles[0], { id: '1', name: 'Alice', email: 'alice@example.com' });
   assert.deepStrictEqual(conf.currencies, ['USD', 'CNY']);
   assert.deepStrictEqual(conf.categories, { Food: ['Dining', 'Snack'] });
+});
+
+test('getConfig supports name-only roles sheet', () => {
+  const sheets = {
+    Config_Roles: new MockSheet([
+      ['name'],
+      ['Alice'],
+      ['Bob']
+    ]),
+    Config_Currency: new MockSheet([
+      ['code'],
+      ['USD']
+    ]),
+    Config_Categories: new MockSheet([
+      ['cat', 'sub'],
+      ['Food', 'Dining']
+    ]),
+    Transactions: new MockSheet([
+      ['timestamp']
+    ])
+  };
+  global.SpreadsheetApp = {
+    getActive: () => new MockSpreadsheet(sheets)
+  };
+  refreshConfig();
+  const conf = getConfig();
+  assert.deepStrictEqual(conf.roles, [
+    { id: 'Alice', name: 'Alice', email: '' },
+    { id: 'Bob', name: 'Bob', email: '' }
+  ]);
 });
 
 test('recordTxn appends row', () => {
@@ -78,6 +109,13 @@ test('recordTxn appends row', () => {
   });
   assert.ok(res.ok);
   assert.strictEqual(sheets.Transactions.getLastRow(), 2);
+  const row = sheets.Transactions.values[1];
+  assert.strictEqual(row[1], 'Dining');
+  assert.strictEqual(row[2], 'Food');
+  assert.strictEqual(row[3], 10);
+  assert.strictEqual(row[4], 'Alice');
+  assert.strictEqual(row[5], 'USD');
+  assert.strictEqual(row[6], 'Test');
 });
 
 test('recordTxn requires role', () => {
@@ -88,4 +126,37 @@ test('recordTxn requires role', () => {
     subcategory: 'Dining',
     amount: 5
   }), /缺少 role/);
+});
+
+test('recordTxn rejects unknown currency', () => {
+  setupEnv();
+  assert.throws(() => recordTxn({
+    role: 'Alice',
+    currency: 'EUR',
+    category: 'Food',
+    subcategory: 'Dining',
+    amount: 5
+  }), /currency 不在配置中/);
+});
+
+test('recordTxn rejects unknown category', () => {
+  setupEnv();
+  assert.throws(() => recordTxn({
+    role: 'Alice',
+    currency: 'USD',
+    category: 'Travel',
+    subcategory: 'Flight',
+    amount: 5
+  }), /category 不在配置中/);
+});
+
+test('recordTxn rejects unknown subcategory', () => {
+  setupEnv();
+  assert.throws(() => recordTxn({
+    role: 'Alice',
+    currency: 'USD',
+    category: 'Food',
+    subcategory: 'Breakfast',
+    amount: 5
+  }), /subcategory 不在配置中/);
 });
