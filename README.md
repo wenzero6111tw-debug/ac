@@ -9,7 +9,7 @@
 timestamp	subcategory	category	amount	role	currency	note
 
 2、Config_Roles:
-role_id	role_name	password
+role_name
 
 3、Config_Currency:currency_code
 
