@@ -26,7 +26,7 @@ function include(filename) {
 }
 
 /**
- * 读取配置：角色/币种/分类映射，并根据登录邮箱尝试自动识别角色
+ * 读取配置：角色/币种/分类映射
  * 需要的工作表：
  * - Config_Roles: [role_id, role_name, email?]
  * - Config_Currency: [currency_code]
@@ -84,13 +84,8 @@ function recordTxn(payload) {
 
   const conf = getConfig();
 
-  // 若未显式选择角色且可自动识别，就用 autoRole
-  if ((!role || role === '') && conf.autoRole) {
-    role = conf.autoRole;
-  }
-
   // 基本校验
-  if (!role) throw new Error('缺少 role（未匹配到自动角色，且未选择）');
+  if (!role) throw new Error('缺少 role');
   if (!currency) throw new Error('缺少 currency');
   if (!category) throw new Error('缺少 category');
   if (!subcategory) throw new Error('缺少 subcategory');
