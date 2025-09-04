@@ -67,7 +67,7 @@ function recordTxn(payload) {
 /**
  * 读取配置：角色/币种/分类映射，结果缓存以减少重复读取
  * 需要的工作表：
- * - Config_Roles: [role_id, role_name, email?]
+ * - Config_Roles: [role_id, role_name, email?] 或 [role_name, email?]
  * - Config_Currency: [currency_code]
  * - Config_Categories: [category, subcategory]
  */
@@ -88,8 +88,12 @@ function getConfig() {
   const rolesValues = rolesSheet.getDataRange().getValues();
   const roles = [];
   for (let i = 1; i < rolesValues.length; i++) {
-    const [id, name, email] = rolesValues[i];
-    if (name) roles.push({ id: String(id || ''), name: String(name), email: String(email || '') });
+    const row = rolesValues[i];
+    let id = row[0];
+    let name = row[1];
+    const email = row[2];
+    if (!name) name = id; // 只有一列时兼容把首列视为 name
+    if (name) roles.push({ id: String(id || name), name: String(name), email: String(email || '') });
   }
 
   // Currencies

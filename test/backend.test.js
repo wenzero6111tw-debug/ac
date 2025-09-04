@@ -67,6 +67,36 @@ test('getConfig parses sheets', () => {
   assert.deepStrictEqual(conf.categories, { Food: ['Dining', 'Snack'] });
 });
 
+test('getConfig supports name-only roles sheet', () => {
+  const sheets = {
+    Config_Roles: new MockSheet([
+      ['name'],
+      ['Alice'],
+      ['Bob']
+    ]),
+    Config_Currency: new MockSheet([
+      ['code'],
+      ['USD']
+    ]),
+    Config_Categories: new MockSheet([
+      ['cat', 'sub'],
+      ['Food', 'Dining']
+    ]),
+    Transactions: new MockSheet([
+      ['timestamp']
+    ])
+  };
+  global.SpreadsheetApp = {
+    getActive: () => new MockSpreadsheet(sheets)
+  };
+  refreshConfig();
+  const conf = getConfig();
+  assert.deepStrictEqual(conf.roles, [
+    { id: 'Alice', name: 'Alice', email: '' },
+    { id: 'Bob', name: 'Bob', email: '' }
+  ]);
+});
+
 test('recordTxn appends row', () => {
   const sheets = setupEnv();
   const res = recordTxn({
