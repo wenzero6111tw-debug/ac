@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>SheetLedger</title>
+  <style>
+    :root{
+      --base:17px; --radius:14px; --gap:12px; --pad:16px; --tap:48px;
+      --shadow:0 4px 14px rgba(0,0,0,.06);
+      --chip-bg:#f1f5f9; --chip-txt:#0f172a; --chip-on:#111827; --chip-on-txt:#fff;
+    }
+    html,body{height:100%;}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+      font-size:var(--base);background:#f8fafc;color:#0f172a;-webkit-font-smoothing:antialiased;}
+    .wrap{min-height:100%;padding:24px 14px calc(80px + env(safe-area-inset-bottom));box-sizing:border-box;}
+    .card{max-width:680px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:var(--radius);box-shadow:var(--shadow);}
+    .head{padding:18px var(--pad);border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+    .title{font-weight:700;font-size:20px;}
+    .progress{font-size:13px;color:#64748b;}
+    .body{padding:18px var(--pad);}
+    .group{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+    label{font-size:13px;color:#475569;}
+    select,input,textarea{width:100%;box-sizing:border-box;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font-size:18px;min-height:var(--tap);background:#fff;}
+    textarea{resize:vertical}
+    .hint{font-size:13px;color:#64748b;margin-top:6px}.ok{color:#047857}.err{color:#b91c1c}
+    .hidden{display:none}
+
+    /* 宫格按钮 */
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap);}
+    @media(min-width:520px){.grid{grid-template-columns:repeat(3,1fr);}}
+    .chip{display:flex;align-items:center;justify-content:center;text-align:center;
+      padding:12px 10px;min-height:56px;border-radius:14px;border:1px solid #e2e8f0;
+      background:var(--chip-bg);color:var(--chip-txt);font-weight:700;font-size:16px;line-height:1.2;cursor:pointer;user-select:none;}
+    .chip[data-selected="1"]{background:var(--chip-on);color:var(--chip-on-txt);border-color:#0b1220;}
+    .chip:active{transform:translateY(1px)}
+
+    /* 底部导航栏 */
+    .footer{position:fixed;left:0;right:0;bottom:0;z-index:10;padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+      background:rgba(255,255,255,.95);backdrop-filter:saturate(180%) blur(10px);border-top:1px solid #e2e8f0;}
+    .footer-inner{max-width:680px;margin:0 auto;display:flex;gap:10px;}
+    .btn{flex:1;border:0;border-radius:12px;min-height:var(--tap);font-weight:700;font-size:17px;cursor:pointer;}
+    .btn-primary{background:#111827;color:#fff}.btn-ghost{background:#f1f5f9;color:#0f172a}.btn:disabled{opacity:.5;cursor:not-allowed}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="card">
+      <div class="head">
+        <div class="title">记一笔</div>
+        <div class="progress" id="progress">步骤 1 / 5</div>
+      </div>
+
+      <div class="body">
+
+        <!-- Step 0: 角色（若 autoRole 存在自动跳过） -->
+        <section class="step" data-step="0" id="step-role">
+          <div class="group" id="roleWrap">
+            <label>角色</label>
+            <div class="grid" id="gridRole"></div> <!-- 用grid替代select -->
+          </div>
+        </section>
+
+        <!-- Step 1: 货币（宫格按钮） -->
+        <section class="step hidden" data-step="1" id="step-currency">
+          <div class="group">
+            <label>货币</label>
+            <div class="grid" id="gridCurrency"></div>
+          </div>
+        </section>
+
+        <!-- Step 2: 大类（宫格按钮） -->
+        <section class="step hidden" data-step="2" id="step-category">
+          <div class="group">
+            <label>预算大类</label>
+            <div class="grid" id="gridCategory"></div>
+          </div>
+        </section>
+
+        <!-- Step 3: 细类（跟随大类联动，宫格按钮） -->
+        <section class="step hidden" data-step="3" id="step-subcategory">
+          <div class="group">
+            <label>预算细类</label>
+            <div class="grid" id="gridSubcategory"></div>
+          </div>
+        </section>
+
+        <!-- Step 4: 金额 -->
+        <section class="step hidden" data-step="4" id="step-amount">
+          <div class="group">
+            <label>金额</label>
+            <input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="例如 88.88" />
+          </div>
+        </section>
+
+        <!-- Step 5: 备注 + 提交 -->
+        <section class="step hidden" data-step="5" id="step-note">
+          <div class="group">
+            <label>备注（可选）</label>
+            <textarea id="note" rows="2" placeholder="例如 晚餐/地铁/便利店"></textarea>
+          </div>
+          <div class="hint" id="msg"></div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部导航 -->
+  <div class="footer">
+    <div class="footer-inner">
+      <button class="btn btn-ghost" id="btnPrev">上一步</button>
+      <button class="btn btn-primary" id="btnNext">下一步</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const state = {
+      conf:null, autoRole:false, step:0, lastStep:5,
+      sel:{ currency:'', category:'', subcategory:'' }
+    };
+
+    function setMsg(text, ok=false){
+      const el=$('msg'); el.textContent=text||''; el.className='hint ' + (ok?'ok':'err');
+    }
+
+    // 宫格渲染
+    function renderChips(container, items, getLabel=(x)=>x, selected=''){
+      container.innerHTML=''; // 清空容器
+      items.forEach(val => {
+        const div = document.createElement('div');
+        div.className = 'chip';
+        div.textContent = getLabel(val);
+        div.dataset.value = val.name;  // 角色名称
+        if (val.name === selected) div.dataset.selected = '1';
+        div.addEventListener('click', () => {
+          [...container.children].forEach(c => c.dataset.selected = '0');
+          div.dataset.selected = '1';
+          state.sel.role = val.name; // 更新选中的角色
+        }, { passive: true });
+        container.appendChild(div); // 添加按钮
+      });
+    }
+    function getSelected(container){
+      const hit=[...container.children].find(c=>c.dataset.selected==='1');
+      return hit ? hit.dataset.value : '';
+    }
+    function clearSelected(container){ [...container.children].forEach(c=>c.dataset.selected='0'); }
+
+    function showStep(n){
+      state.step=n;
+      document.querySelectorAll('.step').forEach(s=>s.classList.add('hidden'));
+      const target=document.querySelector(`.step[data-step="${n}"]`);
+      if(target) target.classList.remove('hidden');
+      $('progress').textContent=`步骤 ${Math.min(n+1,state.lastStep+1)} / ${state.lastStep+1}`;
+      $('btnPrev').disabled=(n===0);
+      $('btnNext').textContent=(n===state.lastStep)?'提交':'下一步';
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+
+    function validateStep(n){
+      if(n===0 && !state.autoRole) {
+        if (!$('role').value) { setMsg('请选择角色'); return false; }
+        return true;
+      }
+      if(n===1){
+        state.sel.currency=getSelected($('gridCurrency'));
+        if(!state.sel.currency){ setMsg('请选择货币'); return false; }
+        return true;
+      }
+      if(n===2){
+        state.sel.category=getSelected($('gridCategory'));
+        if(!state.sel.category){ setMsg('请选择大类'); return false; }
+        return true;
+      }
+      if(n===3){
+        state.sel.subcategory=getSelected($('gridSubcategory'));
+        if(!state.sel.subcategory){ setMsg('请选择细类'); return false; }
+        return true;
+      }
+      if(n===4){
+        const a=Number($('amount').value);
+        if(!(a>0)){ setMsg('金额需 > 0'); return false; }
+        return true;
+      }
+      return true;
+    }
+
+    function collectPayload(){
+      const role = state.autoRole ? state.conf.autoRole : $('role').value;
+      return {
+        role,
+        currency: state.sel.currency,
+        category: state.sel.category,
+        subcategory: state.sel.subcategory,
+        amount: Number($('amount').value),
+        note: $('note').value.trim()
+      };
+    }
+
+    function submit(){
+      const payload=collectPayload();
+      $('btnNext').disabled=true; setMsg('');
+      google.script.run.withSuccessHandler((res)=>{
+        $('btnNext').disabled=false;
+        if(res && res.ok){
+          setMsg(`已记录（行 ${res.row}）`, true);
+          $('amount').value=''; $('note').value='';
+          showStep(4); // 回到金额，方便连续记账
+        }else setMsg('提交失败');
+      }).withFailureHandler((err)=>{
+        $('btnNext').disabled=false;
+        setMsg(err && err.message ? err.message : '提交失败');
+      }).recordTxn(payload);
+    }
+
+    // 下一步/上一步
+    $('btnNext').addEventListener('click', ()=>{
+      setMsg('');
+      if(state.step===state.lastStep){
+        if(validateStep(state.step)) submit();
+        return;
+      }
+      if(validateStep(state.step)){
+        if(state.step===2){ // 选中大类后刷新细类
+          const subs=(state.conf && state.conf.categories[state.sel.category])||[];
+          renderChips($('gridSubcategory'), subs, (x)=>x, '');
+        }
+        showStep(state.step+1);
+      }
+    });
+    $('btnPrev').addEventListener('click', ()=>{ setMsg(''); if(state.step>0) showStep(state.step-1); });
+
+    // 初始化
+    google.script.run.withSuccessHandler((conf)=>{
+      state.conf=conf;
+
+      // 角色
+      if(conf.autoRole){
+        state.autoRole=true; $('roleWrap').classList.add('hidden'); showStep(1);
+      }else{
+        // 仍用下拉选择角色（更稳）
+        $('role').innerHTML='';
+        const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— 请选择 —';
+        $('role').appendChild(opt0);
+        conf.roles.forEach(r=>{
+          const opt=document.createElement('option'); opt.value=r.name; opt.textContent=r.name;
+          $('role').appendChild(opt);
+        });
+        showStep(0);
+      }
+
+      // 货币 chips
+      renderChips($('gridCurrency'), conf.currencies, (x)=>x, '');
+
+      // 大类 chips
+      const cats=Object.keys(conf.categories);
+      renderChips($('gridCategory'), cats, (x)=>x, '');
+
+      // 首次细类先空
+      $('gridSubcategory').innerHTML='';
+    }).withFailureHandler((err)=>{
+      setMsg(err && err.message ? err.message : '配置加载失败');
+    }).getConfig();
+  </script>
+</body>
+</html>
