@@ -103,7 +103,7 @@ function recordTxn(payload) {
   const sheet = ss.getSheetByName('Transactions');
   if (!sheet) throw new Error('缺少 Transactions 表');
 
-  const row = [new Date(), role, currency, category, subcategory, Number(amt), note || ''];
+  const row = [new Date(), subcategory,category,Number(amt),role, currency, note || ''];
   sheet.appendRow(row);
 
   return { ok: true, row: sheet.getLastRow() };
