@@ -112,10 +112,10 @@ function recordTxn(payload) {
 /** 快速造一条示例数据（可在 Apps Script 里手动运行） */
 function seedOne() {
   return recordTxn({
-    role: 'Will',
+    role: 'huang',
     currency: 'CNY',
-    category: '生活',
-    subcategory: '餐饮',
+    category: '餐饮',
+    subcategory: '外出就餐',
     amount: 12.5,
     note: '测试'
   });
