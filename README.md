@@ -3,18 +3,17 @@
 
 利用google sheet表格进行数据存储和配置管理
 
-表格一共4张字表如下:
-1、Transactions
--timestamp	subcategory	category	amount	role	currency	note
+表格一共4张字表如下
 
-2、Config_Roles
--role_id	role_name	password
+1、Transactions:
+timestamp	subcategory	category	amount	role	currency	note
 
-3、Config_Currency
--currency_code
+2、Config_Roles:
+role_id	role_name	password
 
-4、Config_Categories
--category	subcategory
+3、Config_Currency:currency_code
+
+4、Config_Categories:category	subcategory
 
 
 
