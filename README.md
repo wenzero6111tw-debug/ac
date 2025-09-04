@@ -18,3 +18,11 @@ role_id	role_name	password
 
 
  
+
+## 本地测试
+
+```bash
+npm test
+```
+
+以上命令会运行后端单元测试。测试文件及 Node 依赖在部署到 Google Apps Script 时会被 `.claspignore` 排除。

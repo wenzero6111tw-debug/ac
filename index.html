@@ -53,11 +53,11 @@
 
       <div class="body">
 
-        <!-- Step 0: 角色（若 autoRole 存在自动跳过） -->
+        <!-- Step 0: 角色 -->
         <section class="step" data-step="0" id="step-role">
-          <div class="group" id="roleWrap">
+          <div class="group">
             <label>角色</label>
-            <div class="grid" id="gridRole"></div> <!-- 用grid替代select -->
+            <div class="grid" id="gridRole"></div>
           </div>
         </section>
 
@@ -114,155 +114,6 @@
     </div>
   </div>
 
-  <script>
-    const $ = (id)=>document.getElementById(id);
-    const state = {
-      conf:null, autoRole:false, step:0, lastStep:5,
-      sel:{ currency:'', category:'', subcategory:'' }
-    };
-
-    function setMsg(text, ok=false){
-      const el=$('msg'); el.textContent=text||''; el.className='hint ' + (ok?'ok':'err');
-    }
-
-    // 宫格渲染
-    function renderChips(container, items, getLabel=(x)=>x, selected=''){
-      container.innerHTML=''; // 清空容器
-      items.forEach(val => {
-        const div = document.createElement('div');
-        div.className = 'chip';
-        div.textContent = getLabel(val);
-        div.dataset.value = val.name;  // 角色名称
-        if (val.name === selected) div.dataset.selected = '1';
-        div.addEventListener('click', () => {
-          [...container.children].forEach(c => c.dataset.selected = '0');
-          div.dataset.selected = '1';
-          state.sel.role = val.name; // 更新选中的角色
-        }, { passive: true });
-        container.appendChild(div); // 添加按钮
-      });
-    }
-    function getSelected(container){
-      const hit=[...container.children].find(c=>c.dataset.selected==='1');
-      return hit ? hit.dataset.value : '';
-    }
-    function clearSelected(container){ [...container.children].forEach(c=>c.dataset.selected='0'); }
-
-    function showStep(n){
-      state.step=n;
-      document.querySelectorAll('.step').forEach(s=>s.classList.add('hidden'));
-      const target=document.querySelector(`.step[data-step="${n}"]`);
-      if(target) target.classList.remove('hidden');
-      $('progress').textContent=`步骤 ${Math.min(n+1,state.lastStep+1)} / ${state.lastStep+1}`;
-      $('btnPrev').disabled=(n===0);
-      $('btnNext').textContent=(n===state.lastStep)?'提交':'下一步';
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
-
-    function validateStep(n){
-      if(n===0 && !state.autoRole) {
-        if (!$('role').value) { setMsg('请选择角色'); return false; }
-        return true;
-      }
-      if(n===1){
-        state.sel.currency=getSelected($('gridCurrency'));
-        if(!state.sel.currency){ setMsg('请选择货币'); return false; }
-        return true;
-      }
-      if(n===2){
-        state.sel.category=getSelected($('gridCategory'));
-        if(!state.sel.category){ setMsg('请选择大类'); return false; }
-        return true;
-      }
-      if(n===3){
-        state.sel.subcategory=getSelected($('gridSubcategory'));
-        if(!state.sel.subcategory){ setMsg('请选择细类'); return false; }
-        return true;
-      }
-      if(n===4){
-        const a=Number($('amount').value);
-        if(!(a>0)){ setMsg('金额需 > 0'); return false; }
-        return true;
-      }
-      return true;
-    }
-
-    function collectPayload(){
-      const role = state.autoRole ? state.conf.autoRole : $('role').value;
-      return {
-        role,
-        currency: state.sel.currency,
-        category: state.sel.category,
-        subcategory: state.sel.subcategory,
-        amount: Number($('amount').value),
-        note: $('note').value.trim()
-      };
-    }
-
-    function submit(){
-      const payload=collectPayload();
-      $('btnNext').disabled=true; setMsg('');
-      google.script.run.withSuccessHandler((res)=>{
-        $('btnNext').disabled=false;
-        if(res && res.ok){
-          setMsg(`已记录（行 ${res.row}）`, true);
-          $('amount').value=''; $('note').value='';
-          showStep(4); // 回到金额，方便连续记账
-        }else setMsg('提交失败');
-      }).withFailureHandler((err)=>{
-        $('btnNext').disabled=false;
-        setMsg(err && err.message ? err.message : '提交失败');
-      }).recordTxn(payload);
-    }
-
-    // 下一步/上一步
-    $('btnNext').addEventListener('click', ()=>{
-      setMsg('');
-      if(state.step===state.lastStep){
-        if(validateStep(state.step)) submit();
-        return;
-      }
-      if(validateStep(state.step)){
-        if(state.step===2){ // 选中大类后刷新细类
-          const subs=(state.conf && state.conf.categories[state.sel.category])||[];
-          renderChips($('gridSubcategory'), subs, (x)=>x, '');
-        }
-        showStep(state.step+1);
-      }
-    });
-    $('btnPrev').addEventListener('click', ()=>{ setMsg(''); if(state.step>0) showStep(state.step-1); });
-
-    // 初始化
-    google.script.run.withSuccessHandler((conf)=>{
-      state.conf=conf;
-
-      // 角色
-      if(conf.autoRole){
-        state.autoRole=true; $('roleWrap').classList.add('hidden'); showStep(1);
-      }else{
-        // 仍用下拉选择角色（更稳）
-        $('role').innerHTML='';
-        const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— 请选择 —';
-        $('role').appendChild(opt0);
-        conf.roles.forEach(r=>{
-          const opt=document.createElement('option'); opt.value=r.name; opt.textContent=r.name;
-          $('role').appendChild(opt);
-        });
-        showStep(0);
-      }
-
-      // 货币 chips
-      renderChips($('gridCurrency'), conf.currencies, (x)=>x, '');
-
-      // 大类 chips
-      const cats=Object.keys(conf.categories);
-      renderChips($('gridCategory'), cats, (x)=>x, '');
-
-      // 首次细类先空
-      $('gridSubcategory').innerHTML='';
-    }).withFailureHandler((err)=>{
-      setMsg(err && err.message ? err.message : '配置加载失败');
-    }).getConfig();
-  </script>
+  <script src="main.js"></script>
 </body>
 </html>
