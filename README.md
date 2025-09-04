@@ -1,7 +1,7 @@
 # ac
 简易记账
 
-利用google sheet表格进行数据存储和配置管理
+利用google sheet表格进行数据存储和配置管理,利用apps script进行脚本和页面部署.
 
 表格一共4张字表如下
 
