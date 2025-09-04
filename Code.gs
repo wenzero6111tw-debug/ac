@@ -25,14 +25,55 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+let _configCache = null;
+
 /**
- * 读取配置：角色/币种/分类映射
+ * 写一笔交易到 Transactions
+ * 仅保留 role 一列作为“记账人”标识，不再写 created_by
+ * 需要的工作表：
+ * - Transactions: [timestamp, subcategory, category, amount, role, currency, note]
+ */
+function recordTxn(payload) {
+  if (!payload) throw new Error('空请求');
+  let { role, currency, category, subcategory, amount, note } = payload;
+
+  const conf = getConfig();
+
+  // 基本校验
+  if (!role) throw new Error('缺少 role');
+  if (!currency) throw new Error('缺少 currency');
+  if (!category) throw new Error('缺少 category');
+  if (!subcategory) throw new Error('缺少 subcategory');
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) throw new Error('amount 非法');
+
+  // 枚举校验
+  const roleOk = conf.roles.some(r => r.name === role || r.id === role);
+  if (!roleOk) throw new Error('role 不在配置中');
+  if (!conf.currencies.includes(currency)) throw new Error('currency 不在配置中');
+  if (!conf.categories[category]) throw new Error('category 不在配置中');
+  if (!conf.categories[category].includes(subcategory)) throw new Error('subcategory 不在配置中');
+
+  const ss = _ss();
+  const sheet = ss.getSheetByName('Transactions');
+  if (!sheet) throw new Error('缺少 Transactions 表');
+
+  const row = [new Date(), subcategory, category, Number(amt), role, currency, note || ''];
+  sheet.appendRow(row);
+
+  return { ok: true, row: sheet.getLastRow() };
+}
+
+/**
+ * 读取配置：角色/币种/分类映射，结果缓存以减少重复读取
  * 需要的工作表：
  * - Config_Roles: [role_id, role_name, email?]
  * - Config_Currency: [currency_code]
  * - Config_Categories: [category, subcategory]
  */
 function getConfig() {
+  if (_configCache) return _configCache;
+
   const ss = _ss();
 
   const rolesSheet = ss.getSheetByName('Config_Roles');
@@ -69,44 +110,14 @@ function getConfig() {
     mapping[cat].push(String(sub));
   }
 
-  return { roles, currencies, categories: mapping };
+  _configCache = { roles, currencies, categories: mapping };
+  return _configCache;
 }
 
-/**
- * 写一笔交易到 Transactions
- * 仅保留 role 一列作为“记账人”标识，不再写 created_by
- * 需要的工作表：
- * - Transactions: [timestamp, role, currency, category, subcategory, amount, note]
- */
-function recordTxn(payload) {
-  if (!payload) throw new Error('空请求');
-  let { role, currency, category, subcategory, amount, note } = payload;
-
-  const conf = getConfig();
-
-  // 基本校验
-  if (!role) throw new Error('缺少 role');
-  if (!currency) throw new Error('缺少 currency');
-  if (!category) throw new Error('缺少 category');
-  if (!subcategory) throw new Error('缺少 subcategory');
-  const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) throw new Error('amount 非法');
-
-  // 枚举校验
-  const roleOk = conf.roles.some(r => r.name === role || r.id === role);
-  if (!roleOk) throw new Error('role 不在配置中');
-  if (!conf.currencies.includes(currency)) throw new Error('currency 不在配置中');
-  if (!conf.categories[category]) throw new Error('category 不在配置中');
-  if (!conf.categories[category].includes(subcategory)) throw new Error('subcategory 不在配置中');
-
-  const ss = _ss();
-  const sheet = ss.getSheetByName('Transactions');
-  if (!sheet) throw new Error('缺少 Transactions 表');
-
-  const row = [new Date(), subcategory,category,Number(amt),role, currency, note || ''];
-  sheet.appendRow(row);
-
-  return { ok: true, row: sheet.getLastRow() };
+/** 清空配置缓存，可在配置变更后调用 */
+function refreshConfig() {
+  _configCache = null;
+  return getConfig();
 }
 
 /** 快速造一条示例数据（可在 Apps Script 里手动运行） */
